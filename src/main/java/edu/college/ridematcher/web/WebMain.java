@@ -3,6 +3,7 @@ package edu.college.ridematcher.web;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import edu.college.ridematcher.fare.FarePredictionService;
+import edu.college.ridematcher.demo.DemoData;
 import edu.college.ridematcher.graph.CityGraph;
 import edu.college.ridematcher.matching.CompatibilityRelation;
 import edu.college.ridematcher.matching.MatchResult;
@@ -24,9 +25,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** Small localhost presentation server. Matching and fare logic stay in the existing Java/Python services. */
 public final class WebMain {
     private static final Set<String> DEMO_ZONES = new HashSet<String>(Arrays.asList("A", "B", "C", "D", "E"));
-    private final CityGraph graph = createCityGraph();
-    private final RideService rideService = new RideService(new MatchingEngine(graph, new CompatibilityRelation()), createDrivers());
+    private final CityGraph graph = DemoData.createCityGraph();
+    private final RideService rideService = new RideService(new MatchingEngine(graph, new CompatibilityRelation()), DemoData.createDrivers());
     private final AtomicInteger tripCounter = new AtomicInteger(1);
+    private final Object fareCsvLock = new Object();
     private final String pythonCommand;
 
     private WebMain(String pythonCommand) { this.pythonCommand = pythonCommand; }
@@ -39,6 +41,7 @@ public final class WebMain {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         server.createContext("/", app::servePage);
         server.createContext("/api/match", app::matchRide);
+        server.createContext("/api/drivers", app::listDrivers);
         server.setExecutor(Executors.newFixedThreadPool(4));
         server.start();
         System.out.println("Ride-Hailing Driver Matcher dashboard running at http://127.0.0.1:" + port);
@@ -62,6 +65,33 @@ public final class WebMain {
         exchange.sendResponseHeaders(200, content.length);
         exchange.getResponseBody().write(content);
         exchange.close();
+    }
+
+    private void listDrivers(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod()) || !"/api/drivers".equals(exchange.getRequestURI().getPath())) {
+            sendJson(exchange, 405, "{\"error\":\"Use GET to view the simulated driver fleet.\"}");
+            return;
+        }
+        StringBuilder json = new StringBuilder("{\"drivers\":[");
+        List<Driver> drivers = rideService.getDrivers();
+        int availableCount = 0;
+        Set<VehicleType> vehicleTypes = new LinkedHashSet<VehicleType>();
+        for (int i = 0; i < drivers.size(); i++) {
+            Driver driver = drivers.get(i);
+            if (driver.isAvailable()) availableCount++;
+            vehicleTypes.add(driver.getVehicle().getType());
+            if (i > 0) json.append(',');
+            json.append("{\"id\":"); quote(json, driver.getId());
+            property(json, "name", driver.getName());
+            property(json, "vehicle", driver.getVehicle().getType().name()); property(json, "zone", driver.getLocation().getZone());
+            json.append(",\"waitingMinutes\":").append(driver.getWaitingMinutes());
+            json.append(",\"capacity\":").append(driver.getVehicle().getCapacity());
+            json.append(",\"available\":").append(driver.isAvailable()).append('}');
+        }
+        json.append("],\"zoneCount\":").append(graph.getZoneCount());
+        json.append(",\"vehicleTypeCount\":").append(vehicleTypes.size());
+        json.append(",\"availableCount\":").append(availableCount).append('}');
+        sendJson(exchange, 200, json.toString());
     }
 
     private void matchRide(HttpExchange exchange) throws IOException {
@@ -90,7 +120,7 @@ public final class WebMain {
             List<String> trace = new ArrayList<String>();
             MatchResult result = rideService.requestRide(request, trace);
             if (!result.isMatched()) {
-                sendJson(exchange, 200, noMatchJson(trace));
+                sendJson(exchange, 200, noMatchJson(request, trace));
                 return;
             }
 
@@ -102,7 +132,11 @@ public final class WebMain {
             int durationMinutes = Math.max(5, routeHops * 8);
             Integer fare = null;
             String fareError = null;
-            try { fare = Integer.valueOf(new FarePredictionService(pythonCommand, Paths.get(".").toAbsolutePath().normalize()).estimateFare(request, routeHops.intValue(), demand)); }
+            try {
+                synchronized (fareCsvLock) {
+                    fare = Integer.valueOf(new FarePredictionService(pythonCommand, Paths.get(".").toAbsolutePath().normalize()).estimateFare(request, routeHops.intValue(), demand));
+                }
+            }
             catch (InterruptedException error) { Thread.currentThread().interrupt(); fareError = "Fare prediction was interrupted. Please try again."; }
             catch (IOException error) { fareError = friendlyFareError(error.getMessage()); }
 
@@ -129,7 +163,12 @@ public final class WebMain {
         property(json, "vehicle", driver.getVehicle().getType().name()); property(json, "pickup", request.getPickup().getZone());
         property(json, "destination", request.getDestination().getZone()); property(json, "driverZone", driver.getLocation().getZone());
         property(json, "demand", demand);
+        json.append(",\"passengers\":").append(request.getPassengerCount());
         json.append(",\"proximityHops\":").append(result.getDistance()).append(",\"waitingMinutes\":").append(driver.getWaitingMinutes());
+        json.append(",\"vehicleCompatible\":").append(driver.getVehicle().getType() == request.getRequiredVehicleType());
+        json.append(",\"capacitySufficient\":").append(driver.getVehicle().getCapacity() >= request.getPassengerCount());
+        json.append(",\"driverAvailable\":").append(driver.isAvailable());
+        json.append(",\"nearestCompatibleDriver\":").append(result.isMatched());
         json.append(",\"routeHops\":").append(routeHops).append(",\"distanceKm\":").append(distanceKm).append(",\"durationMinutes\":").append(durationMinutes);
         if (fare == null) json.append(",\"fare\":null"); else json.append(",\"fare\":").append(fare.intValue());
         if (fareError == null) json.append(",\"fareError\":null"); else { json.append(",\"fareError\":"); quote(json, fareError); }
@@ -137,8 +176,11 @@ public final class WebMain {
         return json.toString();
     }
 
-    private String noMatchJson(List<String> trace) {
-        StringBuilder json = new StringBuilder("{\"matched\":false,\"message\":\"No compatible driver is currently available for this request.\",\"trace\":");
+    private String noMatchJson(RideRequest request, List<String> trace) {
+        StringBuilder json = new StringBuilder("{\"matched\":false,\"message\":\"No compatible driver is currently available for this request.\"");
+        property(json, "pickup", request.getPickup().getZone()); property(json, "destination", request.getDestination().getZone());
+        property(json, "vehicle", request.getRequiredVehicleType().name());
+        json.append(",\"passengers\":").append(request.getPassengerCount()).append(",\"trace\":");
         stringArray(json, trace); return json.append('}').toString();
     }
     private String errorJson(String message) { StringBuilder json = new StringBuilder("{\"error\":"); quote(json, message == null ? "Invalid ride request." : message); return json.append('}').toString(); }
@@ -184,22 +226,4 @@ public final class WebMain {
         return value.trim();
     }
 
-    private static CityGraph createCityGraph() {
-        CityGraph graph = new CityGraph();
-        String[][] edges = {{"A","B"},{"A","C"},{"B","D"},{"B","E"},{"C","F"},{"D","G"},{"E","G"},{"F","G"},{"G","H"}};
-        for (String[] edge : edges) graph.connect(new Location(edge[0]), new Location(edge[1]));
-        return graph;
-    }
-    private static List<Driver> createDrivers() {
-        return Arrays.asList(
-            driver("D1", "Asha Rao", "B", true, VehicleType.CAR, 4, 4),
-            driver("D2", "Ravi Kumar", "D", true, VehicleType.CAR, 8, 4),
-            driver("D3", "Mina Shah", "C", false, VehicleType.CAR, 12, 4),
-            driver("D4", "Kiran Das", "E", true, VehicleType.SUV, 2, 6),
-            driver("D5", "Dev Nair", "F", true, VehicleType.CAR, 6, 4),
-            driver("D6", "Nila Sen", "B", true, VehicleType.BIKE, 5, 1));
-    }
-    private static Driver driver(String id, String name, String zone, boolean available, VehicleType type, int wait, int capacity) {
-        return new Driver(id, name, new Location(zone), available, new Vehicle(type, capacity), wait);
-    }
 }

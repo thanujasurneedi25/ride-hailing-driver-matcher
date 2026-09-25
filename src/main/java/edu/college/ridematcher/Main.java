@@ -1,6 +1,7 @@
 package edu.college.ridematcher;
 
 import edu.college.ridematcher.graph.CityGraph;
+import edu.college.ridematcher.demo.DemoData;
 import edu.college.ridematcher.fare.FarePredictionService;
 import java.io.IOException;
 import java.nio.file.Paths;
@@ -12,15 +13,10 @@ import java.util.*;
 public final class Main {
     private Main() { }
     public static void main(String[] args) {
-        CityGraph graph = createCityGraph();
+        CityGraph graph = DemoData.createCityGraph();
         CompatibilityRelation relation = new CompatibilityRelation();
         MatchingEngine engine = new MatchingEngine(graph, relation);
-        List<Driver> sampleDrivers = Arrays.asList(
-            driver("D1", "Asha", "B", true, VehicleType.CAR, 4),
-            driver("D2", "Ravi", "D", true, VehicleType.CAR, 8),
-            driver("D3", "Mina", "C", false, VehicleType.CAR, 12),
-            driver("D4", "Kiran", "E", true, VehicleType.AUTO, 2),
-            driver("D5", "Dev", "F", true, VehicleType.CAR, 6));
+        List<Driver> sampleDrivers = DemoData.createDrivers();
         RideService service = new RideService(engine, sampleDrivers);
         Rider rider = new Rider("R1", "Anu");
         RideRequest firstRequest = request(rider, "A", "H", VehicleType.CAR, 2);
@@ -40,12 +36,6 @@ public final class Main {
         demonstrateScenarios(graph, relation);
     }
 
-    private static CityGraph createCityGraph() {
-        CityGraph graph = new CityGraph();
-        String[][] edges = {{"A","B"},{"A","C"},{"B","D"},{"B","E"},{"C","F"},{"D","G"},{"E","G"},{"F","G"},{"G","H"}};
-        for (String[] edge : edges) graph.connect(new Location(edge[0]), new Location(edge[1]));
-        return graph;
-    }
     private static Driver driver(String id, String name, String zone, boolean available, VehicleType type, int wait) {
         return new Driver(id, name, new Location(zone), available, new Vehicle(type, 4), wait);
     }

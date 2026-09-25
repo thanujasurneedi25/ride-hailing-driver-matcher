@@ -8,6 +8,7 @@ public final class CityGraph {
     private final Map<Location, List<Location>> adjacencyList = new LinkedHashMap<>();
 
     public void addZone(Location zone) { adjacencyList.computeIfAbsent(zone, ignored -> new ArrayList<>()); }
+    public int getZoneCount() { return adjacencyList.size(); }
     public void connect(Location first, Location second) {
         if (first == null || second == null) throw new IllegalArgumentException("Zones are required.");
         addZone(first); addZone(second);

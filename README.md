@@ -9,7 +9,7 @@ A college demonstration that finds a compatible nearby driver in a small simulat
 - Compatibility checks for availability, vehicle type, and passenger capacity.
 - Deterministic driver selection: nearest compatible driver, then waiting-time tie-break, then ID.
 - Python scikit-learn LinearRegression fare estimate over CSV handoff.
-- Local responsive dashboard with request form, match trace, simulated graph, and fare details.
+- Local responsive dashboard with request form, live Java fleet panel, match explanation, simulated graph, fare breakdown, system overview, six-stage activity timeline, and New Ride reset.
 - The console demo and all five original matching scenarios remain available.
 
 ## Architecture
@@ -35,7 +35,7 @@ Java WebMain / RideService
        Java UI response
 ```
 
-`Main` remains the console entry point. `WebMain` is a separate entry point using Java 8's built-in `HttpServer`; both reuse the same models, `RideService`, `MatchingEngine`, and `FarePredictionService`; the web entry point builds the same A–H sample graph. The visual dashboard is served from `web/index.html` by the local Java process. It does not use a separate matching implementation.
+`Main` remains the console entry point. `WebMain` is a separate entry point using Java 8's built-in `HttpServer`; both use the same models, `DemoData` graph/fleet, `RideService`, `MatchingEngine`, and `FarePredictionService`. `/api/drivers` returns the fleet from `RideService`, so the dashboard does not maintain a separate driver list. The visual dashboard is served from `web/index.html` by the local Java process. It does not use a separate matching implementation.
 
 ## Technologies
 - Java 8, Java Collections Framework, and built-in `com.sun.net.httpserver.HttpServer`
@@ -89,6 +89,16 @@ java "-Dpython.command=$((Resolve-Path .\python-ml\.venv\Scripts\python.exe).Pat
 
 The console still prints its ride example and five Stage 1 scenarios.
 
+
+## Dashboard Explainability
+- **Driver fleet:** The panel loads driver ID, name, vehicle/capacity, zone, wait time, and availability from Java `/api/drivers`, backed by the same shared `DemoData` used by the console and web matcher.
+- **Why this driver:** The result reports the selected driver's vehicle-type compatibility, passenger capacity, and availability from the matched Java objects. It labels the driver nearest-compatible because `MatchingEngine` returned that driver, and shows actual BFS hops and waiting minutes. The engine ranks by hops first, then wait time.
+- **Simulated city graph:** The SVG edge list matches the shared Java A–H graph. A match highlights the actual pickup and selected-driver zones and shows the Java BFS proximity; it does not draw an invented road route.
+- **AI fare estimation:** The panel shows the trip distance and duration estimates used as Python model features, along with vehicle, demand, fare returned by Python, and the Linear Regression model name. The browser does not calculate fares.
+- **System overview:** Driver count, available count, zone count, and vehicle-type count come from the Java fleet/graph endpoint. BFS and Linear Regression labels identify the implemented algorithms.
+- **Matching activity:** The six rows correspond to request receipt, compatibility checks, BFS distances, Java driver selection, Python fare prediction, and the final result. When there is no match, selection is reported as skipped and fare prediction is not run.
+- **New Ride:** Resets the form and clears previous match, graph highlights, and timeline without reloading the page.
+
 ## Project Limitations
 - City zones, edges, driver availability, and driver locations are simulated and fixed for the demo.
 - Fare training data is simulated educational data, not real ride-hailing records.
@@ -97,5 +107,3 @@ The console still prints its ride example and five Stage 1 scenarios.
 
 ## Future Improvements
 Possible future work includes real historical ride data, geospatial indexing, real-time GPS, advanced ML matching, mobile applications, and real map integration. These features are not implemented in this project.
-
-
