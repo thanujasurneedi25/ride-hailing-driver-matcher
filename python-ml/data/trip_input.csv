@@ -1,0 +1,2 @@
+trip_id,distance_km,duration_min,demand_level,passengers,vehicle_type
+"WEB14",2.5,8,HIGH,4,SUV
