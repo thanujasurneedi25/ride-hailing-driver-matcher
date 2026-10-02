@@ -1,2 +1,2 @@
 trip_id,distance_km,duration_min,demand_level,passengers,vehicle_type
-"WEB8",5.0,16,NORMAL,2,CAR
+"WEB5",2.5,8,LOW,1,CAR

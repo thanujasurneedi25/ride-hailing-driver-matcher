@@ -1,0 +1,1 @@
+& "C:\Program Files\Java\jdk1.8.0_66\bin\java.exe" "-Dpython.command=$((Resolve-Path .\python-ml\.venv\Scripts\python.exe).Path)" -cp out edu.college.ridematcher.web.WebMain
