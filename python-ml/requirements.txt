@@ -1,4 +1,4 @@
-# Stage 2 Python fare regression
-pandas
-scikit-learn
-joblib
+numpy==1.26.4
+pandas==2.2.3
+scikit-learn==1.6.1
+joblib==1.4.2

@@ -1,0 +1,8 @@
+python-ml/.venv
+.git
+.idea
+.vscode
+out
+**/__pycache__
+*.pyc
+**/*.pyc

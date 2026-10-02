@@ -22,7 +22,7 @@ import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/** Small localhost presentation server. Matching and fare logic stay in the existing Java/Python services. */
+/** Small HTTP presentation server. Matching and fare logic stay in the existing Java/Python services. */
 public final class WebMain {
     private static final Set<String> DEMO_ZONES = new HashSet<String>(Arrays.asList("A", "B", "C", "D", "E"));
     private final CityGraph graph = DemoData.createCityGraph();
@@ -35,16 +35,17 @@ public final class WebMain {
 
     public static void main(String[] args) throws IOException {
         String python = System.getProperty("python.command", System.getenv("PYTHON_COMMAND"));
-        if (python == null || python.trim().isEmpty()) python = "python";
-        int port = Integer.getInteger("ride.port", 8080);
+        if (python == null || python.trim().isEmpty()) python = "python3";
+        String configuredPort = System.getenv("PORT");
+        int port = configuredPort == null || configuredPort.trim().isEmpty() ? 8080 : Integer.parseInt(configuredPort.trim());
         final WebMain app = new WebMain(python);
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         server.createContext("/", app::servePage);
         server.createContext("/api/match", app::matchRide);
         server.createContext("/api/drivers", app::listDrivers);
         server.setExecutor(Executors.newFixedThreadPool(4));
         server.start();
-        System.out.println("Ride-Hailing Driver Matcher dashboard running at http://127.0.0.1:" + port);
+        System.out.println("Ride-Hailing Driver Matcher dashboard listening on 0.0.0.0:" + port);
         System.out.println("Python executable: " + python);
         System.out.println("Press Ctrl+C to stop the dashboard.");
     }

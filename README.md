@@ -63,7 +63,7 @@ python -m pip install -r python-ml/requirements.txt
 python python-ml/train_model.py
 ```
 
-Train once before using the dashboard. The UI's default Python command is `python`. To configure a different executable, pass its full path in `-Dpython.command` as shown below.
+Train once before using the dashboard. The default Python command is `python3` (`python` on older Windows setups can be selected with `-Dpython.command`). You can configure another executable with the `-Dpython.command` property as shown below.
 
 ### 2. Compile Java
 
@@ -88,6 +88,10 @@ java "-Dpython.command=$((Resolve-Path .\python-ml\.venv\Scripts\python.exe).Pat
 ```
 
 The console still prints its ride example and five Stage 1 scenarios.
+
+## Deploy on Render
+
+Create a **Web Service** on Render using the **Docker** runtime and your **GitHub** repository. Keep the Dockerfile at the project root. The Java server reads Render's `PORT` environment variable automatically and binds to `0.0.0.0`; locally it falls back to port 8080. Render's free service may sleep after inactivity.
 
 
 ## Dashboard Explainability
